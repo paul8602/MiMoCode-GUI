@@ -1,147 +1,251 @@
-<h1 align="center">MiMoCode</h1>
+<h1 align="center">MiMo Code Desktop GUI</h1>
 
 <p align="center">
   <img src="assets/readme/mimocode-banner.png" alt="MiMoCode" width="700">
 </p>
 
-<p align="center"><strong>An open-source AI coding agent with cross-session memory.</strong></p>
-
-<p align="center">
-  <a href="README.zh.md">中文</a> | English
-</p>
-
-<p align="center">
-  <a href="https://mimo.xiaomi.com/en/mimocode">Website</a> | <a href="https://mimo.xiaomi.com/en/blog/mimo-code-long-horizon">Blog</a>
-</p>
+<p align="center"><strong>基于 MiMo Code 的桌面端 GUI 应用，参考 Codex 三栏布局设计。</strong></p>
 
 ---
 
-MiMoCode is a terminal-native AI coding assistant. It can read and write code, run commands, manage Git, and use a persistent memory system to keep a deep understanding of your project across sessions while continuously improving itself.
+## 简介
 
-MiMo Auto is built in as a free-for-limited-time channel, so you can start with zero configuration. MiMoCode also supports connecting to any mainstream LLM provider API.
+MiMo Code Desktop GUI 是基于 [MiMo Code](https://github.com/XiaomiMiMo/MiMo-Code) 构建的桌面端图形界面应用。采用三栏布局设计（参考 OpenAI Codex Desktop），为 AI 编程助手提供更直观的交互体验。
 
----
+## 核心特性
 
-## Quick Start
+### 三栏布局
 
-```bash
-# One-line install
-curl -fsSL https://mimo.xiaomi.com/install | bash
-
-# Or install via npm
-npm install -g @mimo-ai/cli
+```
+┌─────────────┬──────────────────────┬──────────────┐
+│  左侧边栏    │  主工作区             │  右侧摘要面板 │
+│             │                      │              │
+│  项目列表    │  Composer 输入框      │  Agent 计划   │
+│  会话列表    │  对话流（流式输出）    │  引用文件     │
+│  任务/记忆   │  代码 Diff 查看       │  产物列表     │
+│             │  终端标签页            │              │
+└─────────────┴──────────────────────┴──────────────┘
 ```
 
-The first launch guides you through configuration automatically. Supported options:
-- **MiMo Auto (free for a limited time)** — anonymous channel, zero configuration
-- **Xiaomi MiMo Platform** — OAuth login
-- **Import from Claude Code** — migrate existing authentication in one step
-- **Custom Provider** — add any OpenAI-compatible API in the TUI
+### 功能模块
+
+| 模块 | 说明 |
+|------|------|
+| **SummaryPane** | 右侧摘要面板，包含 Plan/Sources/Artifacts 三个 Tab |
+| **MemoryPanel** | 记忆管理面板，查看/编辑项目记忆、会话检查点、笔记 |
+| **ReviewQueue** | 跨会话审查队列，支持状态筛选和快速操作 |
+| **TaskTreeView** | 树形任务可视化，实时同步 Agent 任务状态 |
+| **系统托盘** | 托盘图标 + 右键菜单（显示/新建/退出） |
+| **全局快捷键** | `Cmd+Shift+M` 显示/隐藏，`Cmd+Shift+N` 新建会话 |
+
+### Agent 系统
+
+| Agent | 说明 |
+|-------|------|
+| **build** | 默认模式，完整工具权限，用于开发 |
+| **plan** | 只读分析模式，用于代码探索和方案设计 |
+| **compose** | 编排模式，规范驱动开发和技能工作流 |
+
+按 `Tab` 键切换 Agent。
+
+### 持久化记忆
+
+基于 SQLite FTS5 全文搜索的跨会话记忆系统：
+
+- **项目记忆** (`MEMORY.md`) — 持久化的项目知识、规则和架构决策
+- **会话检查点** (`checkpoint.md`) — 自动维护的结构化状态快照
+- **临时笔记** (`notes.md`) — Agent 的临时笔记区域
+- **任务进度** (`tasks/<id>/progress.md`) — 每个任务的日志
+
+会话恢复时自动注入记忆，无需重新学习项目上下文。
+
+### 代码审查
+
+- 行内评论：在 Diff 行上添加评论，支持 @mention
+- 审查队列：跨会话聚合待审查项
+- Approve/Reject：一键批准或拒绝代码变更
+- Fork 操作：从任意消息点创建新会话
 
 ---
 
-## Core Features
+## 快速开始
 
-### Multiple Agents
+### 环境要求
 
-| Agent | Description |
+- [Bun](https://bun.sh) v1.3+
+- Node.js v18+
+
+### 安装
+
+```bash
+# 克隆仓库
+git clone https://github.com/XiaomiMiMo/MiMo-Code.git
+cd MiMo-Code
+
+# 安装依赖
+bun install
+```
+
+### 一键启动
+
+**Web 模式（推荐调试）：**
+```bash
+./start.sh
+# 自动启动后端 + 前端 + 打开浏览器
+```
+
+**桌面端（Electron）：**
+```bash
+./start-desktop.sh
+# 自动启动后端 + Electron 桌面应用
+```
+
+### 手动启动
+
+**终端 1 — 启动后端：**
+```bash
+cd packages/opencode
+bun run --conditions=browser ./src/index.ts serve --port 4096
+```
+
+**终端 2 — 启动前端：**
+```bash
+cd packages/app
+bun dev -- --port 4444
+```
+
+打开 `http://localhost:4444`
+
+**或启动 Electron 桌面应用：**
+```bash
+cd packages/desktop
+bun dev
+```
+
+### 配置 LLM 提供商
+
+首次启动后需要配置 LLM 提供商：
+
+1. 打开设置（`Cmd+,`）
+2. 在 Providers 中添加提供商：
+   - **MiMo Auto**（限时免费）：选择 MiMo Auto，按提示登录
+   - **自定义 API**：添加 OpenAI 兼容的 API key 和 endpoint
+3. 在 Composer 区域选择智能体和模型
+
+---
+
+## 项目结构
+
+```
+packages/
+├── app/              # SolidJS Web 前端
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── summary/      # SummaryPane（Plan/Sources/Artifacts）
+│   │   │   ├── memory/       # MemoryPanel（记忆管理）
+│   │   │   ├── review/       # ReviewQueue（审查队列）
+│   │   │   ├── chat/         # 对话组件
+│   │   │   ├── terminal/     # 终端组件
+│   │   │   └── prompt-input/ # Composer 输入框
+│   │   ├── stores/           # 状态管理（summary/memory/review）
+│   │   ├── context/          # SolidJS Context Providers
+│   │   ├── pages/            # 页面组件
+│   │   ├── i18n/             # 国际化（17 种语言）
+│   │   └── utils/            # 工具函数
+│   └── e2e/                  # Playwright E2E 测试
+├── desktop/          # Electron 桌面应用
+│   └── src/
+│       ├── main/             # 主进程
+│       │   ├── tray.ts       # 系统托盘
+│       │   ├── shortcuts.ts  # 全局快捷键
+│       │   ├── window-registry.ts  # 窗口注册表
+│       │   └── server.ts     # 后端服务管理
+│       ├── preload/          # 预加载脚本
+│       └── renderer/         # 渲染进程
+├── ui/               # 共享 UI 组件库（Kobalte + Tailwind）
+├── opencode/         # 核心引擎 + HTTP Server
+├── sdk/              # JavaScript SDK
+└── shared/           # 共享工具函数
+```
+
+---
+
+## 快捷键
+
+### 全局（系统级）
+
+| 快捷键 | 功能 |
 |--------|------|
-| **build** | Default. Full tool permissions for development |
-| **plan** | Read-only analysis mode for code exploration and solution design |
-| **compose** | Orchestration mode for specs-driven development and skill-driven workflows |
+| `Cmd+Shift+M` | 显示/隐藏窗口 |
+| `Cmd+Shift+N` | 新建会话 |
 
-Press `Tab` to switch between primary agents. Subagents are created by the system as needed.
+### 导航
 
-### Persistent Memory
+| 快捷键 | 功能 |
+|--------|------|
+| `Cmd+B` | 切换侧边栏 |
+| `Cmd+Shift+B` | 切换摘要面板 |
+| `Cmd+O` | 打开项目 |
+| `Cmd+,` | 打开设置 |
+| `Cmd+Shift+P` | 命令面板 |
 
-Cross-session memory powered by SQLite FTS5 full-text search:
+### 会话
 
-- **Project memory** (`MEMORY.md`) — persistent project knowledge, rules, and architecture decisions
-- **Session checkpoint** (`checkpoint.md`) — structured state snapshots maintained automatically by the checkpoint-writer subagent
-- **Scratch notes** (`notes.md`) — temporary note area for agents
-- **Task progress** (`tasks/<id>/progress.md`) — per-task logs
-
-Memory is injected automatically when a session resumes, so the agent does not need to relearn project context.
-
-### Intelligent Context Management
-
-- **Automatic checkpoints** — decides when to save session state based on the model context window
-- **Context reconstruction** — when context approaches the limit, rebuilds it from the latest checkpoint, project memory, task progress, and retained recent messages so the agent can continue the current task
-- **Budgeted injection** — uses a token budget to control how much checkpoint, memory, and notes content enters context, with importance ranking
-
-### Task Tracking
-
-A tree-shaped task system (`T1`, `T1.1`, `T1.2`, …) that integrates automatically with the checkpoint system, so task progress is preserved when sessions resume.
-
-### Subagent System
-
-The primary agent can create subagents on demand. Subagents share the current session context and can work in parallel, with lifecycle tracking, cancellation, and background execution.
-
-### Goal / Stop Condition
-
-The `/goal` command sets a stopping condition for a session. When the agent tries to stop, an independent judge model evaluates the conversation to decide whether the condition is truly satisfied — preventing premature "optimistic stops" during autonomous work.
-
-### Compose Mode
-
-Compose mode provides a structured workflow for specs-driven development. It includes built-in skills for planning, execution, code review, TDD, debugging, verification, and merging — orchestrating the full lifecycle from spec to shipped code.
-
-### Voice Input
-
-Real-time streaming voice input powered by TenVAD and MiMo ASR. Activate with `/voice`, then speak — audio is segmented by pauses and transcribed incrementally into the input. Available for MiMo logged-in users.
-
-### Dream & Distill
-
-- **`/dream`** — scans recent session traces, extracts persistent knowledge into project memory, and removes outdated entries
-- **`/distill`** — discovers repeated manual workflows in recent work and packages high-confidence candidates into reusable skills, subagents, or commands
+| 快捷键 | 功能 |
+|--------|------|
+| `Enter` | 发送消息 |
+| `Shift+Enter` | 换行 |
+| `Escape` | 中止当前操作 |
+| `Cmd+.` | 切换智能体 |
+| `Ctrl+`` | 切换终端 |
 
 ---
 
-## Configuration
+## 技术栈
 
-MiMoCode is configured via `.mimocode/mimocode.json` in the project directory (or `~/.config/mimocode/mimocode.json` globally). Key options include:
-
-- Provider and model selection
-- Agent permissions and custom agents
-- Checkpoint and memory behavior
-- MCP server connections
-- Keybindings and theme
-
-Max Mode (parallel best-of-N reasoning with judge selection) can be enabled via `experimental.maxMode` in the config.
+| 层级 | 技术 |
+|------|------|
+| UI 框架 | SolidJS |
+| 样式 | Tailwind CSS |
+| 组件库 | Kobalte |
+| 桌面端 | Electron |
+| 终端 | Ghostty (GPU 加速) |
+| 构建 | Bun + Vite + Turborepo |
+| 数据库 | SQLite (Drizzle ORM) |
+| LLM 集成 | Vercel AI SDK (18+ 提供商) |
+| 协议 | MCP + ACP |
 
 ---
 
-## Development
+## 开发
 
 ```bash
-bun install              # Install dependencies
-bun run dev              # Run in development mode
-bun turbo typecheck      # Type check
+# 安装依赖
+bun install
+
+# 类型检查
+cd packages/app && bun typecheck
+cd packages/desktop && bun typecheck
+
+# 单元测试
+cd packages/app && bun test:unit
+
+# E2E 测试
+cd packages/app && bun test:e2e
 ```
 
 ---
 
-## Relationship to OpenCode
+## 相关项目
 
-MiMoCode is built as a fork of [OpenCode](https://github.com/anomalyco/opencode). It keeps all core OpenCode capabilities (multiple providers, TUI, LSP, MCP, plugins) and adds persistent memory, intelligent context management, subagent orchestration, goal-driven autonomous loops, compose workflows, and self-improvement via dream/distill.
-
----
-
-## Community
-
-Scan the QR code to join the community group chat:
-
-<p align="center">
-  <img src="assets/readme/community-qrcode-1.jpg" alt="Community group chat QR code 1" width="240">
-  &nbsp;&nbsp;
-  <img src="assets/readme/community-qrcode-2.jpg" alt="Community group chat QR code 2" width="240">
-</p>
+- [MiMo Code](https://github.com/XiaomiMiMo/MiMo-Code) — 核心引擎
+- [OpenCode](https://github.com/anomalyco/opencode) — 上游项目
 
 ---
 
-## License
+## 许可证
 
-Source code is licensed under the [MIT License](./LICENSE).
+源代码基于 [MIT 许可证](./LICENSE)。
 
-Use of MiMoCode is also subject to the [Use Restrictions](./USE_RESTRICTIONS.md).
-Use of Xiaomi MiMo-hosted services is subject to the [MiMo Terms of Service](https://platform.xiaomimimo.com/docs/terms/user-agreement).
-Use of the MiMo name, logo, and trademarks is subject to the MiMo Trademark Policy.
+使用 MiMoCode 需遵守[使用限制](./USE_RESTRICTIONS.md)。
+使用小米 MiMo 托管服务需遵守[MiMo 服务条款](https://platform.xiaomimimo.com/docs/terms/user-agreement)。

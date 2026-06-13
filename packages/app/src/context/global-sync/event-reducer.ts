@@ -11,7 +11,7 @@ import type {
   SnapshotFileDiff,
   Todo,
 } from "@mimo-ai/sdk/v2/client"
-import type { State, VcsCache } from "./types"
+import type { State, TaskRecord, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
@@ -174,6 +174,28 @@ export function applyDirectoryEvent(input: {
       const props = event.properties as { sessionID: string; todos: Todo[] }
       input.setStore("todo", props.sessionID, reconcile(props.todos, { key: "id" }))
       input.setSessionTodo?.(props.sessionID, props.todos)
+      break
+    }
+    case "task.created": {
+      const props = event.properties as { sessionID: string; task: TaskRecord }
+      const existing = input.store.task[props.sessionID] ?? []
+      const idx = existing.findIndex((t) => t.id === props.task.id)
+      if (idx >= 0) {
+        input.setStore("task", props.sessionID, idx, reconcile(props.task))
+      } else {
+        input.setStore("task", props.sessionID, [...existing, props.task])
+      }
+      break
+    }
+    case "task.updated": {
+      const props = event.properties as { sessionID: string; task: TaskRecord }
+      const existing = input.store.task[props.sessionID] ?? []
+      const idx = existing.findIndex((t) => t.id === props.task.id)
+      if (idx >= 0) {
+        input.setStore("task", props.sessionID, idx, reconcile(props.task))
+      } else {
+        input.setStore("task", props.sessionID, [...existing, props.task])
+      }
       break
     }
     case "session.status": {

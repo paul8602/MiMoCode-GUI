@@ -73,6 +73,7 @@ const baseState = (input: Partial<State> = {}) =>
     session_status: {},
     session_diff: {},
     todo: {},
+    task: {},
     permission: {},
     question: {},
     mcp: {},

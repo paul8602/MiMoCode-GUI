@@ -16,6 +16,19 @@ import type {
   Todo,
   VcsInfo,
 } from "@mimo-ai/sdk/v2/client"
+
+export type TaskRecord = {
+  id: string
+  session_id: string
+  parent_task_id?: string
+  status: "open" | "in_progress" | "blocked" | "done" | "abandoned"
+  summary: string
+  owner?: string
+  created_at: number
+  last_event_at: number
+  ended_at?: number
+  cleanup_after?: number
+}
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 
@@ -51,6 +64,9 @@ export type State = {
   }
   todo: {
     [sessionID: string]: Todo[]
+  }
+  task: {
+    [sessionID: string]: TaskRecord[]
   }
   permission: {
     [sessionID: string]: PermissionRequest[]

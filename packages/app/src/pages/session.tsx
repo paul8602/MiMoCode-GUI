@@ -29,13 +29,14 @@ import { previewSelectedLines } from "@mimo-ai/ui/pierre/selection-bridge"
 import { Button } from "@mimo-ai/ui/button"
 import { showToast } from "@mimo-ai/ui/toast"
 import { checksum } from "@mimo-ai/shared/util/encode"
-import { useSearchParams } from "@solidjs/router"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useCommand } from "@/context/command"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
@@ -55,6 +56,11 @@ import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { SummaryPane, type TaskNode, type SourceItem, type ArtifactItem } from "@/components/summary/summary-pane"
+import { MemoryPanel, type MemoryContent } from "@/components/memory/memory-panel"
+import { summaryStore } from "@/stores/summary-store"
+import { memoryStore } from "@/stores/memory-store"
+import { reviewStore } from "@/stores/review-store"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
@@ -64,6 +70,27 @@ import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
+import { extractSourcesFromParts, extractArtifactsFromDiffs } from "@/utils/summary-helpers"
+import type { TaskRecord } from "@/context/global-sync/types"
+import type { Part } from "@mimo-ai/sdk/v2/client"
+
+function toTaskNode(task: TaskRecord, allTasks: TaskRecord[]): import("@/components/summary/summary-pane").TaskNode {
+  const children = allTasks
+    .filter((t: TaskRecord) => t.parent_task_id === task.id)
+    .map((t: TaskRecord) => toTaskNode(t, allTasks))
+  return {
+    id: task.id,
+    summary: task.summary,
+    status: task.status,
+    parent: task.parent_task_id,
+    children,
+    depth: task.id.split(".").length - 1,
+  }
+}
+
+function buildTaskTree(tasks: TaskRecord[]): TaskRecord[] {
+  return tasks.filter((t) => !t.parent_task_id)
+}
 
 const emptyUserMessages: UserMessage[] = []
 type FollowupItem = FollowupDraft & { id: string }
@@ -332,6 +359,7 @@ export default function Page() {
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const { params, sessionKey, tabs, view } = useSessionLayout()
 
@@ -499,6 +527,33 @@ export default function Page() {
     ),
   )
 
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    const sessionTasks = globalSync.child(sdk.directory, { bootstrap: false })[0].task[id]
+    if (sessionTasks) {
+      summaryStore.setTasks(sessionTasks.map((t) => toTaskNode(t, sessionTasks)))
+    }
+  })
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    const allParts = Object.values(sync.data.part).filter(Boolean) as Part[][]
+    const sources = extractSourcesFromParts(allParts)
+    summaryStore.setSources(sources)
+  })
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    const sessionDiffs = sync.data.session_diff[id]
+    if (sessionDiffs) {
+      const artifacts = extractArtifactsFromDiffs(sessionDiffs)
+      summaryStore.setArtifacts(artifacts)
+    }
+  })
+
   createEffect(
     on(
       () => ({ dir: params.dir, id: params.id }),
@@ -517,6 +572,8 @@ export default function Page() {
     changes: "git" as ChangeMode,
     newSessionWorktree: "main",
     deferRender: false,
+    summaryCollapsed: true,
+    summaryWidth: 320,
   })
 
   const [followup, setFollowup] = persisted(
@@ -1039,6 +1096,17 @@ export default function Page() {
     review: reviewTab,
   })
 
+  const command = useCommand()
+  command.register("session-summary", () => [
+    {
+      id: "summary.toggle",
+      title: "Toggle Summary Panel",
+      category: "View",
+      keybind: "mod+shift+b",
+      onSelect: () => setStore("summaryCollapsed", !store.summaryCollapsed),
+    },
+  ])
+
   const openReviewFile = createOpenReviewFile({
     showAllFiles,
     tabForPath: file.tab,
@@ -1152,6 +1220,40 @@ export default function Page() {
 
   const reviewPanel = () => (
     <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
+      <Show when={hasReview() && reviewReady()}>
+        <div class="flex items-center gap-2 px-3 py-2 border-b border-border-base">
+          <span class="text-12-regular text-text-weak flex-1">
+            {reviewCount()} file{reviewCount() !== 1 ? "s" : ""} changed
+          </span>
+          <button
+            type="button"
+            class="px-3 py-1 text-12-medium bg-accent-green/10 text-accent-green rounded-md hover:bg-accent-green/20 transition-colors"
+            onClick={() => {
+              showToast({
+                title: "Changes approved",
+                description: "All changes have been accepted",
+              })
+              reviewStore.updateStatus(params.id ?? "", "approved")
+            }}
+          >
+            Approve
+          </button>
+          <button
+            type="button"
+            class="px-3 py-1 text-12-medium bg-accent-red/10 text-accent-red rounded-md hover:bg-accent-red/20 transition-colors"
+            onClick={() => {
+              showToast({
+                variant: "error",
+                title: "Changes rejected",
+                description: "All changes have been rejected",
+              })
+              reviewStore.updateStatus(params.id ?? "", "rejected")
+            }}
+          >
+            Reject
+          </button>
+        </div>
+      </Show>
       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
         {reviewContent({
           diffStyle: layout.review.diffStyle(),
@@ -1693,6 +1795,21 @@ export default function Page() {
     return revertMutation.mutateAsync(input)
   }
 
+  const fork = async (input: { sessionID: string; messageID: string }) => {
+    try {
+      const result = await sdk.client.session.fork({
+        sessionID: input.sessionID,
+        directory: sdk.directory,
+        messageID: input.messageID,
+      })
+      if (result.data) {
+        navigate(`/${params.dir}/session/${result.data.id}`)
+      }
+    } catch (err) {
+      fail(err)
+    }
+  }
+
   const restore = (id: string) => {
     if (!params.id || reverting()) return
     return restoreMutation.mutateAsync(id)
@@ -1706,7 +1823,7 @@ export default function Page() {
       .map((item) => ({ id: item.id, text: line(item.id) }))
   })
 
-  const actions = { revert }
+  const actions = { revert, fork }
 
   createEffect(() => {
     const sessionID = params.id
@@ -1964,6 +2081,24 @@ export default function Page() {
           reviewSnap={ui.reviewSnap}
           size={size}
         />
+
+        <Show when={isDesktop()}>
+          <SummaryPane
+            width={store.summaryWidth}
+            collapsed={store.summaryCollapsed}
+            onToggleCollapse={() => setStore("summaryCollapsed", !store.summaryCollapsed)}
+            tasks={summaryStore.state.tasks}
+            sources={summaryStore.state.sources}
+            artifacts={summaryStore.state.artifacts}
+            onTaskSelect={(id) => console.log("Task selected:", id)}
+            onSourceClick={(path) => {
+              const tab = file.tab(path)
+              tabs().open(tab)
+              tabs().setActive(tab)
+            }}
+            onArtifactClick={(id) => console.log("Artifact selected:", id)}
+          />
+        </Show>
       </div>
 
       <TerminalPanel />

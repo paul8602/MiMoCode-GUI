@@ -42,6 +42,9 @@ import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import { getDefaultServerUrl, getWslConfig, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
+import { createTray, destroyTray } from "./tray"
+import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./shortcuts"
+import { registerWindow, generateWindowId, getAllWindows } from "./window-registry"
 import {
   createLoadingWindow,
   createMainWindow,
@@ -96,10 +99,14 @@ function setupApp() {
   })
 
   app.on("before-quit", () => {
+    unregisterGlobalShortcuts()
+    destroyTray()
     killSidecar()
   })
 
   app.on("will-quit", () => {
+    unregisterGlobalShortcuts()
+    destroyTray()
     killSidecar()
   })
 
@@ -211,7 +218,53 @@ async function initialize() {
   }
 
   mainWindow = createMainWindow()
+  registerWindow({
+    id: generateWindowId(),
+    window: mainWindow,
+    createdAt: Date.now(),
+  })
   wireMenu()
+
+  createTray({
+    channel: CHANNEL,
+    onShowWindow: () => {
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore()
+        mainWindow.show()
+        mainWindow.focus()
+      }
+    },
+    onNewSession: () => {
+      if (mainWindow) {
+        mainWindow.show()
+        mainWindow.focus()
+        sendMenuCommand(mainWindow, "session.new")
+      }
+    },
+    onQuit: () => {
+      killSidecar()
+      app.quit()
+    },
+  })
+
+  registerGlobalShortcuts({
+    onShowHide: () => {
+      if (!mainWindow) return
+      if (mainWindow.isVisible()) {
+        mainWindow.hide()
+      } else {
+        mainWindow.show()
+        mainWindow.focus()
+      }
+    },
+    onNewSession: () => {
+      if (mainWindow) {
+        mainWindow.show()
+        mainWindow.focus()
+        sendMenuCommand(mainWindow, "session.new")
+      }
+    },
+  })
 
   overlay?.close()
 }
